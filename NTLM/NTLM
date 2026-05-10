@@ -1,0 +1,65 @@
+# Cracking NTLMv2 Hashes from PCAP Files
+
+**Source:** https://www.801labs.org/research-portal/post/cracking-an-ntlmv2-hash/
+
+## Overview
+This guide walks through extracting NTLMv2 hashes from captured network traffic (.pcap files) and cracking them using hashcat.
+
+## Step-by-Step Process
+
+### 1. Open PCAP in Wireshark
+- Load the .pcap file containing the NTLMv2 authentication handshake
+
+### 2. Filter NTLMSSP Traffic
+- Apply filter: `ntlmssp`
+- This isolates the NTLM authentication packets
+
+### 3. Locate NTLMSSP_AUTH Packet
+- Find the NTLMSSP_AUTH packet (typically the third authentication packet)
+- Navigate to the Security Blob layer to access the authentication data
+
+### 4. Extract Username and Domain
+- From the authentication data, copy the domain name and username to a text file
+
+### 5. Extract NTProofStr and NTLMv2 Response
+- Locate the NTLM Response section
+- Copy **NTProofStr** as a hex string
+- Copy **NTLMv2Response** as a hex string
+
+### 6. Remove Redundant Data
+- NTLMv2Response begins with NTProofStr
+- Remove the NTProofStr from the beginning of NTLMv2Response to avoid duplication
+
+### 7. Extract Server Challenge
+- Filter by: `ntlmssp.ntlmserverchallenge`
+- Copy the NTLM Server Challenge value (typically found in the second auth packet) as a hex string
+
+### 8. Format Hash for Hashcat
+Create a file named `crackme.txt` with the following format:
+
+```
+username::domain:ServerChallenge:NTproofstring:modifiedntlmv2response
+```
+
+**Example:**
+```
+user::DOMAIN:8846f7eaee8fb117:e101fd3a01c7f4971d3a1234567890ab:01010000000000000c123456abcdef78900012345
+```
+
+### 9. Crack with Hashcat
+```bash
+hashcat -m 5600 crackme.txt passwordlist.txt
+```
+
+- `-m 5600` specifies NTLMv2 hash type
+- Replace `passwordlist.txt` with your wordlist (e.g., rockyou.txt)
+- Hashcat will output the cracked password
+
+## Key Points
+- **Hash Type ID (5600):** Hashcat code for NTLMv2
+- **Accuracy:** Ensure hex strings are correctly copied without modification
+- **Wordlist:** Use comprehensive password dictionaries for better success rates
+
+## References
+- https://www.root9b.com/newsroom/attacking-windows-fallback-authentication/
+- https://foxglovesecurity.com/2016/09/26/rotten-potato-privilege-escalation-from-service-accounts-to-system/
