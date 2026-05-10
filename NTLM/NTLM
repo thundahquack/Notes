@@ -1,3 +1,8 @@
+documentation :
+[How To crack NTLM hash](https://www.801labs.org/research-portal/post/cracking-an-ntlmv2-hash/)
+
+[NTLM How TO](https://beta.hackndo.com/pass-the-hash/#authentification)
+
 # Cracking NTLMv2 Hashes from PCAP Files
 
 **Source:** https://www.801labs.org/research-portal/post/cracking-an-ntlmv2-hash/
