@@ -1,0 +1,451 @@
+# Open Redirect Vulnerability
+
+## Overview
+
+An **Open Redirect** vulnerability occurs when a web application accepts a user-supplied URL parameter and redirects the user to that URL without properly validating or sanitizing it. This allows an attacker to redirect users to arbitrary external websites.
+
+## How It Works
+
+Typically, a legitimate application might have a redirect parameter like:
+```
+https://legitimate-site.com/redirect?url=https://trusted-destination.com
+```
+
+An attacker can exploit this by crafting a malicious URL:
+```
+https://legitimate-site.com/redirect?url=https://attacker-site.com
+```
+
+When a user clicks this link, they trust the initial domain (`legitimate-site.com`) but are redirected to the attacker's site instead.
+
+## Attack Scenarios
+
+1. **Phishing**: Attacker uses the legitimate domain to appear trustworthy, then redirects users to a fake login page
+2. **Credential Harvesting**: Users trust the initial domain and unknowingly enter credentials on the attacker's site
+3. **Malware Distribution**: Redirecting users to sites hosting malicious payloads
+4. **Social Engineering**: Leveraging the legitimate domain in phishing emails to bypass email filters
+
+## Common Vulnerable Patterns
+
+- `redirect=...`
+- `url=...`
+- `target=...`
+- `next=...`
+- `return=...`
+- `returnTo=...`
+
+Example vulnerable code (PHP):
+```php
+$redirect_url = $_GET['url'];
+header("Location: " . $redirect_url);
+```
+
+## Impact
+
+- **CVSS Score**: Typically Low to Medium (depends on context)
+- **User Trust Abuse**: Compromises user confidence
+- **Second-stage Attack Vector**: Enables phishing and credential theft
+- **Malware Distribution**: Can facilitate malware delivery
+
+---
+
+## Hash-Based Protection Mechanism (HTTP)
+
+### The Problem It Solves
+
+While redirect parameters are sometimes necessary for legitimate use cases, open redirect vulnerabilities can be prevented by validating that redirect URLs are actually authorized. One sophisticated approach is to use **cryptographic hashing** to verify the legitimacy of redirect URLs.
+
+### How It Works
+
+Instead of passing the redirect URL directly as a parameter, the server:
+
+1. **Generates a hash** of the redirect URL using a cryptographic hash function (e.g., SHA-256)
+2. **Stores the hash** on the server or includes it with the redirect request
+3. **Passes both the URL and hash** to the client
+4. **Upon redirect**, verifies that `HASH(url_parameter) == stored_hash`
+
+### Implementation Example
+
+**Server-side (Python-like pseudocode):**
+```python
+import hashlib
+import hmac
+
+# When creating a redirect URL
+redirect_url = "https://trusted-destination.com/page"
+secret_key = "server_secret_key"
+
+# Generate HMAC hash
+url_hash = hmac.new(
+    secret_key.encode(),
+    redirect_url.encode(),
+    hashlib.sha256
+).hexdigest()
+
+# Send to user with both URL and hash
+redirect_link = f"https://legitimate-site.com/redirect?url={redirect_url}&hash={url_hash}"
+```
+
+**User clicks link, server verifies:**
+```python
+received_url = request.GET['url']
+received_hash = request.GET['hash']
+
+# Recalculate hash
+expected_hash = hmac.new(
+    secret_key.encode(),
+    received_url.encode(),
+    hashlib.sha256
+).hexdigest()
+
+# Compare hashes
+if received_hash != expected_hash:
+    # Reject the redirect
+    abort(403, "Invalid redirect target")
+else:
+    # Safe to redirect
+    redirect(received_url)
+```
+
+### Client Request Flow
+
+```
+User clicks: https://legitimate-site.com/redirect?url=https://trusted.com&hash=abc123def456...
+             ↓
+Server validates: HMAC_SHA256(secret, "https://trusted.com") == "abc123def456..."
+             ↓
+Hash matches → Redirect allowed
+```
+
+### Why This Works
+
+1. **Attacker Cannot Forge**: Without the server's secret key, attackers cannot generate valid hashes for malicious URLs
+2. **URL Integrity**: If the URL parameter is modified, the hash no longer matches
+3. **Server-side Control**: Only URLs pre-authorized by the server (those hashed with the secret key) will be accepted
+4. **No Whitelist Maintenance**: Doesn't require maintaining a whitelist of allowed domains
+
+### Variations
+
+Some implementations use:
+- **State Parameters**: Similar concept using an opaque token that maps to a URL on the server
+- **Signed JWTs**: Encoding the redirect URL in a cryptographically signed JWT token
+- **HMAC with Timestamp**: Including a timestamp in the hash to add time-based expiration
+
+### Weaknesses to Avoid
+
+1. **Client-side hashing**: If the hash is generated client-side, attackers can replicate it
+2. **Weak hash functions**: MD5 or SHA1 are considered weak; use SHA-256 or stronger
+3. **Exposed secret key**: If the server's secret key is leaked, the protection is compromised
+4. **No URL validation before hashing**: Hash the actual URL, not a sanitized version
+5. **Lack of additional validation**: Use hash verification in conjunction with URL allowlisting for defense in depth
+
+### Best Practices
+
+✓ Use HMAC with a strong, randomly generated secret key  
+✓ Use SHA-256 or stronger hash algorithms  
+✓ Never expose the secret key in client-side code  
+✓ Combine with URL allowlisting for critical redirects  
+✓ Consider adding timestamp validation for time-sensitive redirects  
+✓ Log all redirect attempts for security monitoring  
+
+---
+
+## Prevention Strategies
+
+### 1. Avoid Redirect Parameters
+Design your application to minimize the need for dynamic redirect parameters. Pre-determined flows are always safer.
+
+### 2. Whitelist Allowed Destinations
+Maintain a strict list of approved redirect URLs. This is the most effective defense.
+
+**Example implementation (Node.js):**
+```javascript
+const ALLOWED_REDIRECTS = [
+  'https://trusted-partner.com/callback',
+  'https://another-trusted.com/return',
+  '/dashboard',  // Relative URLs are safer
+  '/profile'
+];
+
+app.get('/redirect', (req, res) => {
+  const targetUrl = req.query.url;
+  
+  if (ALLOWED_REDIRECTS.includes(targetUrl)) {
+    res.redirect(targetUrl);
+  } else {
+    res.status(400).send('Invalid redirect target');
+  }
+});
+```
+
+### 3. Validate URL Format
+Ensure URLs are well-formed and match expected patterns before redirecting.
+
+```javascript
+function isValidUrl(url) {
+  try {
+    const parsedUrl = new URL(url);
+    // Check if protocol is http or https only
+    return ['http:', 'https:'].includes(parsedUrl.protocol);
+  } catch (e) {
+    return false;
+  }
+}
+```
+
+### 4. Check Domain
+Verify the redirect URL belongs to your domain or a trusted domain list.
+
+```javascript
+const TRUSTED_DOMAINS = ['trusted-partner.com', 'ally.example.com'];
+
+function isAllowedDomain(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'yourdomain.com' || 
+           TRUSTED_DOMAINS.includes(parsed.hostname);
+  } catch (e) {
+    return false;
+  }
+}
+```
+
+### 5. Use Relative URLs
+Use relative paths instead of absolute URLs when possible. This prevents redirecting outside your domain entirely.
+
+```javascript
+// Bad - can be exploited
+res.redirect(req.query.next);  // Could be external URL
+
+// Good - always relative to your domain
+if (req.query.next && req.query.next.startsWith('/')) {
+  res.redirect(req.query.next);
+}
+```
+
+### 6. Implement Hash Verification
+Use HMAC-based URL verification as described in the Hash-Based Protection section above.
+
+### 7. Add User Confirmation
+Display a confirmation page before redirecting to external sites, allowing users to verify the destination.
+
+```html
+<div class="redirect-warning">
+  <p>You are being redirected to: <strong id="redirectUrl"></strong></p>
+  <p>Click the button below to continue, or go back to safety.</p>
+  <button onclick="confirmRedirect()">Continue</button>
+  <button onclick="goBack()">Go Back</button>
+</div>
+```
+
+### 8. Security Headers
+Use HTTP security headers like CSP (Content Security Policy) to limit redirect capabilities.
+
+```
+Content-Security-Policy: frame-ancestors 'self'
+X-Content-Type-Options: nosniff
+```
+
+---
+
+## Common Developer Mistakes
+
+❌ **Mistake 1: Sanitizing instead of validating**
+```javascript
+// Bad - developer removes 'javascript:' but allows redirects
+const url = req.query.url.replace('javascript:', '');
+res.redirect(url);  // Still vulnerable to //attacker.com
+```
+
+❌ **Mistake 2: Client-side only validation**
+```javascript
+// Bad - easily bypassed by modifying the request directly
+if (url.startsWith('https://')) {  // Client-side only
+  res.redirect(url);
+}
+```
+
+❌ **Mistake 3: Blacklisting instead of whitelisting**
+```javascript
+// Bad - attacker can find ways around blacklist
+const blocked = ['attacker.com', 'evil.org'];
+if (!blocked.includes(url)) {
+  res.redirect(url);  // Vulnerable
+}
+```
+
+❌ **Mistake 4: Trusting URL encoding to prevent attacks**
+```javascript
+// Bad - encoded URLs can still be exploited
+const url = decodeURIComponent(req.query.url);
+res.redirect(url);
+```
+
+## Testing for Open Redirect
+
+### Basic Tests
+
+1. **Direct External URL**
+   ```
+   https://vulnerable-site.com/redirect?url=https://attacker.com
+   ```
+   Expected: Blocked or warning shown  
+   Vulnerable if: Redirects silently to attacker.com
+
+2. **Protocol-Relative URL**
+   ```
+   https://vulnerable-site.com/redirect?url=//attacker.com
+   ```
+   This uses the same protocol as the current page, bypassing some filters.
+
+### Encoding Bypass Attempts
+
+3. **URL Encoding (Single)**
+   ```
+   https://vulnerable-site.com/redirect?url=%2f%2fattacker.com
+   ```
+   The server may decode this before checking, allowing the bypass.
+
+4. **Double URL Encoding**
+   ```
+   https://vulnerable-site.com/redirect?url=%252f%252fattacker.com
+   ```
+   Bypasses filters that decode once but don't recursively check.
+
+5. **Unicode Encoding**
+   ```
+   https://vulnerable-site.com/redirect?url=%e0%80%2fattacker.com
+   ```
+
+6. **Mixed Case & HTML Entities**
+   ```
+   https://vulnerable-site.com/redirect?url=hTTp://attacker.com
+   https://vulnerable-site.com/redirect?url=&#104;ttp://attacker.com
+   ```
+
+### Alternative Protocol Tests
+
+7. **JavaScript Protocol**
+   ```
+   https://vulnerable-site.com/redirect?url=javascript:alert('XSS')
+   https://vulnerable-site.com/redirect?url=javascript:void(0)
+   ```
+   Vulnerable if JavaScript is executed instead of redirecting.
+
+8. **Data Protocol**
+   ```
+   https://vulnerable-site.com/redirect?url=data:text/html,<script>alert('XSS')</script>
+   ```
+
+9. **File Protocol**
+   ```
+   https://vulnerable-site.com/redirect?url=file:///etc/passwd
+   ```
+   Very dangerous if the backend processes file:// URLs.
+
+### Path Traversal Tests
+
+10. **Relative Path Traversal**
+    ```
+    https://vulnerable-site.com/redirect?url=../../../attacker.com
+    ```
+
+11. **Backslash Bypass**
+    ```
+    https://vulnerable-site.com/redirect?url=\\attacker.com
+    ```
+
+### Null Byte & Special Character Tests
+
+12. **Null Byte Injection**
+    ```
+    https://vulnerable-site.com/redirect?url=https://trusted.com%00attacker.com
+    ```
+    Older systems might truncate at null byte.
+
+13. **Fragment Identifier**
+    ```
+    https://vulnerable-site.com/redirect?url=https://trusted.com#attacker.com
+    ```
+
+14. **Query String Tricks**
+    ```
+    https://vulnerable-site.com/redirect?url=https://trusted.com?attacker.com
+    https://vulnerable-site.com/redirect?url=https://trusted.com?redirect=attacker.com
+    ```
+
+### Advanced Techniques
+
+15. **Domain Confusion**
+    ```
+    https://vulnerable-site.com/redirect?url=https://attacker.com@trusted.com
+    ```
+    Some URL parsers may misinterpret this.
+
+16. **Uncommon Port**
+    ```
+    https://vulnerable-site.com/redirect?url=https://attacker.com:443@trusted.com
+    ```
+
+17. **IP Address Variations**
+    ```
+    https://vulnerable-site.com/redirect?url=http://127.0.0.1
+    https://vulnerable-site.com/redirect?url=http://0x7f000001
+    https://vulnerable-site.com/redirect?url=http://2130706433
+    ```
+    These all resolve to localhost/127.0.0.1.
+
+### Testing Workflow
+
+```
+1. Identify redirect parameters (url, next, return, target, etc.)
+2. Start with direct external URLs
+3. Try protocol-relative URLs (//, \\)
+4. Test encoding variations (single, double, unicode)
+5. Try alternative protocols (javascript:, data:, file://)
+6. Test path traversal and null bytes
+7. Try domain confusion techniques
+8. Document all successful bypasses
+```
+
+---
+
+## CVSS Scoring & Risk Assessment
+
+The CVSS (Common Vulnerability Scoring System) score for open redirect varies based on context:
+
+**Typical CVSS Ratings:**
+- **CVSS 3.1 (Low-Medium)**: Basic open redirect to external site
+  - Base Score: 4.7
+  - Vector: Network-Adjacent, Low complexity, No privilege required
+  - Impact: Integrity low (users can be misled)
+
+- **CVSS 5.3 (Medium)**: Open redirect in OAuth/SSO flow
+  - Higher impact due to authentication bypass potential
+  - Can lead to account takeover
+
+- **CVSS 7.1+ (High)**: Open redirect combined with XSS or other vulnerabilities
+
+**Real-World Examples:**
+
+| Company | Impact | Details |
+|---------|--------|---------|
+| Twitter | Medium | OAuth redirect vulnerability allowed phishing attacks |
+| GitHub | Low-Medium | URL redirect parameter vulnerable in specific flows |
+| Google | Low | Temporary redirect to potentially untrusted sites |
+| Microsoft | Medium | Windows SSO redirect vulnerability |
+
+---
+
+## References & Further Reading
+
+- **OWASP**: Open Redirect - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+- **CWE-601**: URL Redirection to Untrusted Site ('Open Redirect')
+- **CVSS Calculator**: https://www.first.org/cvss/calculator/3.1
+- **PortSwigger Web Security Academy**: Open Redirect Security Tutorial
+
+---
+
+## Summary
+
+Open redirect vulnerabilities remain common despite being well-understood. The key defense is **whitelisting** allowed destinations rather than trying to validate or encode URLs. When redirects are necessary, implement **cryptographic hash verification** using HMAC to ensure only pre-authorized URLs can be used. Always validate server-side and never rely on client-side checks alone.
