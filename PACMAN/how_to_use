@@ -1,0 +1,198 @@
+# Pacman: Arch Linux Package Manager Guide
+
+## Introduction
+Pacman is the package manager for Arch Linux and Arch-based distributions (Manjaro, EndeavourOS, etc.). It manages software installation, updates, and removal with a simple command-line interface.
+
+## Basic Syntax
+```
+pacman [option] [package]
+```
+
+## Essential Commands
+
+### System Updates & Maintenance
+
+| Command | Description |
+|---------|-------------|
+| `pacman -Syu` | Update all packages (full system upgrade) |
+| `pacman -Sy` | Sync package database (without upgrading) |
+| `pacman -Syyu` | Force full system update and sync |
+| `pacman -Syyu --ignore=package` | Upgrade while ignoring specific package |
+
+### Package Installation
+
+| Command | Description |
+|---------|-------------|
+| `pacman -S package` | Install a package |
+| `pacman -S package1 package2` | Install multiple packages |
+| `pacman -Sy package` | Sync database and install |
+| `pacman -U /path/to/package.tar.zst` | Install from local file |
+
+### Package Removal
+
+| Command | Description |
+|---------|-------------|
+| `pacman -R package` | Remove package (keep dependencies) |
+| `pacman -Rs package` | Remove package and unused dependencies |
+| `pacman -Rsu package` | Remove package, dependencies, and dependents |
+| `pacman -Rn package` | Remove package and config files |
+
+### Searching & Information
+
+| Command | Description |
+|---------|-------------|
+| `pacman -S package --info` | Show package info before install |
+| `pacman -Si package` | Show remote package information |
+| `pacman -Qi package` | Show installed package information |
+| `pacman -Ss search_term` | Search in repository descriptions |
+| `pacman -Qs search_term` | Search installed packages |
+| `pacman -F file_name` | Search which package provides a file |
+| `pacman -Fl package` | List all files in a package |
+
+### Cache Management
+
+| Command | Description |
+|---------|-------------|
+| `pacman -Sc` | Remove unused cache files (old packages) |
+| `pacman -Scc` | Clear entire package cache (frees disk space) |
+| `pacman -Scd` | Remove packages not installed |
+
+## Common Operations
+
+### Check for Outdated Packages
+```bash
+pacman -Qu
+```
+
+### List All Installed Packages
+```bash
+pacman -Q
+```
+
+### List Package Dependencies
+```bash
+pacman -Qi package_name
+```
+
+### Clean System (Remove Orphaned Packages)
+```bash
+pacman -Rns $(pacman -Qdtq)
+```
+
+### Download Without Installing
+```bash
+pacman -Sw package
+```
+
+## Option Flags Explained
+
+| Flag | Meaning |
+|------|---------|
+| `-S` | Sync (install from repositories) |
+| `-R` | Remove |
+| `-Q` | Query (list/search installed packages) |
+| `-F` | File (search package files) |
+| `-u` | Upgrade |
+| `-y` | Sync database |
+| `-s` | Search |
+| `-i` | Information |
+| `-c` | Clean |
+| `-n` | No preserve (remove config files) |
+| `-s` | Recursive (remove dependencies) |
+
+## Sudo Requirement
+Most pacman operations require root privileges:
+```bash
+sudo pacman -Syu
+sudo pacman -S package
+```
+
+## AUR (Arch User Repository)
+For packages not in official repos, use AUR helpers:
+
+### Using `yay` (recommended AUR helper)
+```bash
+yay -S package          # Install from AUR
+yay -Syu                # Update AUR and official packages
+yay -Rns package        # Remove AUR package
+```
+
+### Using `paru` (alternative AUR helper)
+```bash
+paru -S package
+paru -Syu
+```
+
+## Troubleshooting
+
+### Fix "invalid or corrupted package" error
+```bash
+sudo pacman -Scc        # Clear cache
+sudo pacman -Syu        # Reinstall
+```
+
+### Fix "target not found" error
+```bash
+sudo pacman -Sy         # Sync database
+sudo pacman -S package  # Retry installation
+```
+
+### Fix locked database error
+```bash
+sudo rm /var/lib/pacman/db.lck
+sudo pacman -Syu
+```
+
+### Downgrade a Package
+```bash
+pacman -U /var/cache/pacman/pkg/package-oldversion.pkg.tar.zst
+```
+
+## Best Practices
+
+1. **Regular Updates**: Run `sudo pacman -Syu` weekly to stay secure
+2. **Backup Before Major Updates**: Create snapshots before system upgrades
+3. **Check Pacman Logs**: Review `/var/log/pacman.log` after updates
+4. **Clean Cache Periodically**: Use `pacman -Sc` to free disk space
+5. **Read Package Warnings**: Check `/etc/pacman.d/` for update warnings
+6. **Never Interrupt Updates**: Let `pacman -Syu` complete fully
+7. **Avoid Partial Upgrades**: Don't run `pacman -S` without syncing database first
+
+## Configuration
+Pacman configuration: `/etc/pacman.conf`
+- Enable/disable repositories
+- Set download servers
+- Configure parallel downloads
+- Set package signing policy
+
+## Quick Reference
+
+**Update everything:**
+```bash
+sudo pacman -Syu
+```
+
+**Install a package:**
+```bash
+sudo pacman -S package_name
+```
+
+**Remove a package:**
+```bash
+sudo pacman -Rns package_name
+```
+
+**Search for a package:**
+```bash
+pacman -Ss search_term
+```
+
+**Find which package provides a file:**
+```bash
+pacman -F /path/to/file
+```
+
+**List all installed packages:**
+```bash
+pacman -Q
+```
